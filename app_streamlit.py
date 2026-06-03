@@ -1,5 +1,5 @@
 """
-Streamlit UI for the Wine Quality classifier hosted on SageMaker.
+Streamlit UI for the Churn classifier hosted on SageMaker.
 
 Reads endpoint name and region from environment variables.
 boto3 picks up AWS credentials from:
@@ -24,7 +24,7 @@ def get_runtime_client():
     return boto3.client("sagemaker-runtime", region_name=REGION)
 
 
-def invoke_endpoint(features: list[float]) -> dict:
+def invoke_endpoint(features: list) -> dict:
     runtime = get_runtime_client()
     payload = {"instances": [features]}
     response = runtime.invoke_endpoint(
@@ -40,25 +40,64 @@ st.title("Churn Classifier")
 st.write("Enter the measurements below to predict the Churn of users via SageMaker.")
 
 # 1. Setup User Inputs
-age=st.number_input("age", 0, 100)
-gender=st.radio("gender", ["Male","Female"])
-tenure=st.number_input("the period of time you holds a position (in years)", 0,100)
-usage_freq=st.number_input("the frequency of product usage (in years)", 0,100)
-support_call=st.number_input("number of support calls", 0,10)
-payment_delay=st.number_input("the period of payment delay (in months)", 0,30)
-subs_type=st.radio("choose subscription type", ["Standard","Premium","Basic"])
-contract_length=st.radio("choose contract length", ["Annual","Quarterly","Monthly"])
-total_spend=st.number_input("total spend in a month", 0,1000000000)
-last_interaction=st.number_input("last interaction with the product (in months)", 0,30)
+age = st.number_input("Age", 0, 100, value=25)
+gender = st.radio("Gender", ["Male", "Female"])
+tenure = st.number_input("The period of time you hold a position (in years)", 0, 100, value=1)
+usage_freq = st.number_input("The frequency of product usage (in times/month)", 0, 100, value=5)
+support_call = st.number_input("Number of support calls", 0, 10, value=0)
+payment_delay = st.number_input("The period of payment delay (in months)", 0, 30, value=0)
+subs_type = st.radio("Choose subscription type", ["Basic", "Standard", "Premium"])
+contract_length = st.radio("Choose contract length", ["Monthly", "Quarterly", "Annual"])
+total_spend = st.number_input("Total spend in a month", 0, 1000000000, value=100000)
+last_interaction = st.number_input("Last interaction with the product (in days)", 0, 30, value=2)
 
 if st.button("Predict", type="primary"):
-    features =[
-    Age, Gender, Tenure, Usage_Frequency, Support_Calls, 
-    Payment_Delay, Total_Spend, Last_Interaction, 
-    Subscription_Type_Ordinal, Contract_Length_Ordinal
-]
+    # 2. Proses Mapping/Encoding Teks ke Angka (Sesuaikan dengan urutan pas training modelmu dulu)
+    gender_encoded = 1 if gender == "Male" else 0
+    
+    # Contoh mapping Ordinal untuk Subscription Type
+    subs_mapping = {"Basic": 0, "Standard": 1, "Premium": 2}
+    subs_encoded = subs_mapping[subs_type]
+    
+    # Contoh mapping Ordinal untuk Contract Length
+    contract_mapping = {"Monthly": 0, "Quarterly": 1, "Annual": 2}
+    contract_encoded = contract_mapping[contract_length]
+
+    # 3. Susun sesuai urutan fitur yang diminta oleh Model SageMaker kamu!
+    # Pastikan urutan array ini SAMA PERSIS dengan urutan kolom saat kamu training model.
+    features = [
+        float(age), 
+        float(gender_encoded), 
+        float(tenure), 
+        float(usage_freq), 
+        float(support_call), 
+        float(payment_delay), 
+        float(total_spend), 
+        float(last_interaction), 
+        float(subs_encoded), 
+        float(contract_encoded)
+    ]
+    
     try:
         result = invoke_endpoint(features)
+        
+        # Tergantung output model SageMaker (bisa berupa angka langsung atau dictionary)
+        # Di bawah ini asumsi jika outputnya berupa json standar list/prediksi langsung
+        if isinstance(result, list):
+            prediction = result[0]
+        else:
+            # Jika mengembalikan dictionary seperti struktur kodemu sebelumnya
+            prediction = result.get("predictions", [result])[0]
+            
+        # Menentukan Label (Sesuaikan logika index output modelmu)
+        label = "Churn" if prediction == 1 else "Not Churn"
+        st.success(f"Prediction Result: **{label}**")
+        
+        # Bagian probability dicomment dulu jika struktur output model dari SageMaker belum fiks
+        # probs = result["probabilities"][0]
+        # st.write("Class probabilities:")
+        # st.bar_chart({"probability": probs})
+
     except NoCredentialsError:
         st.error(
             "No AWS credentials found. If running on EC2, attach LabInstanceProfile. "
@@ -66,15 +105,5 @@ if st.button("Predict", type="primary"):
         )
     except ClientError as e:
         st.error(f"AWS error: {e.response['Error'].get('Message', str(e))}")
-    else:
-        label = "Churn" if result == 1 else "Not Churn"
-        probs = result["probabilities"][0]
-
-        st.success(f"Predicted quality: **{label}**")
-        st.write("Class probabilities:")
-        st.bar_chart({"probability": probs})
-
-
-
-
-
+    except Exception as e:
+        st.error(f"Something went wrong: {str(e)}")
