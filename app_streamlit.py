@@ -52,8 +52,11 @@ total_spend=st.number_input("total spend in a month", 0,1000000000)
 last_interaction=st.number_input("last interaction with the product (in months)", 0,30)
 
 if st.button("Predict", type="primary"):
-    features = [
-        Age, Gender, Tenure, Usage Frequency, Support Calls, Payment Delay, Total Spend, Last Interaction, Subscription Type Ordinal,Contract Length Ordinal]
+    features =[
+    Age, Gender, Tenure, Usage_Frequency, Support_Calls, 
+    Payment_Delay, Total_Spend, Last_Interaction, 
+    Subscription_Type_Ordinal, Contract_Length_Ordinal
+]
     try:
         result = invoke_endpoint(features)
     except NoCredentialsError:
